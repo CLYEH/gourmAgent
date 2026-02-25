@@ -1,7 +1,9 @@
 import "dotenv/config";
 import Fastify from "fastify";
 import sensible from "@fastify/sensible";
+import formbody from "@fastify/formbody";
 import { chatRoutes } from "./routes/chat.js";
+import { paymentRoutes } from "./routes/payments.js";
 
 const PORT = Number(process.env.PORT ?? 3000);
 const HOST = process.env.HOST ?? "0.0.0.0";
@@ -17,7 +19,9 @@ const fastify = Fastify({
 });
 
 await fastify.register(sensible);
+await fastify.register(formbody);
 await fastify.register(chatRoutes);
+await fastify.register(paymentRoutes);
 
 fastify.get("/health", async () => ({ status: "ok" }));
 

@@ -55,6 +55,21 @@ class Preference(Base):
     user: Mapped[User] = relationship("User", back_populates="preferences")
 
 
+class ApiKey(Base):
+    """Issued API keys — stored by the TypeScript gateway but mirrored here
+    for audit logging and future server-side validation by the Python agent."""
+
+    __tablename__ = "api_keys"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    key_hash: Mapped[str] = mapped_column(String, unique=True, index=True)
+    user_id: Mapped[str] = mapped_column(String, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    stripe_session_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    revoked: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
 def init_db() -> None:
     """Create all tables if they don't exist."""
     Base.metadata.create_all(bind=engine)

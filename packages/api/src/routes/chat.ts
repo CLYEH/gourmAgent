@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { fetch } from "undici";
 import { z } from "zod";
+import { x402Guard } from "../middleware/x402.js";
 
 const ChatRequestSchema = z.object({
   user_id: z.string().min(1),
@@ -14,7 +15,7 @@ const ChatResponseSchema = z.object({
 });
 
 export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
-  fastify.post("/chat", async (request, reply) => {
+  fastify.post("/chat", { onRequest: x402Guard }, async (request, reply) => {
     const parsed = ChatRequestSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: parsed.error.flatten() });
