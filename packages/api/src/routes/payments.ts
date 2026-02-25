@@ -1,22 +1,44 @@
 /**
- * Payment routes — Phase 2: Stripe card payments.
+ * Payment routes — Phase 2: Stripe card payments + Phase 3: on-chain USDC.
  *
- * Flow:
+ * Card flow (Phase 2):
  *  1. POST /payments/card/create-session  → Stripe Checkout session, returns redirect_url
  *  2. User completes Stripe checkout
  *  3. POST /payments/card/webhook         → Stripe fires this; server issues an API key
  *  4. GET  /payments/card/key?session_id= → Client retrieves the API key (one-time)
  *  5. GET  /payments/card/success         → Stripe success redirect page
  *  6. GET  /payments/card/cancel          → Stripe cancel redirect page
+ *
+ * Crypto flow (Phase 3):
+ *  1. POST /payments/crypto/initiate      → Derive deposit address, start Transfer watcher
+ *  2. Client sends USDC to deposit_address on Base
+ *  3. Watcher detects Transfer → API key issued automatically (≤30 s)
+ *  4. POST /payments/crypto/verify        → Poll payment status (pending / not found)
+ *  5. GET  /payments/crypto/key           → Retrieve API key once payment confirmed
  */
 
 import type { FastifyInstance } from "fastify";
 import Stripe from "stripe";
 import { z } from "zod";
 import { keyStore } from "../keyStore.js";
+import {
+  usdcPaymentManager,
+  getUsdcContract,
+  USDC_PRICE_DISPLAY,
+} from "../wallet/usdc.js";
 
 const CreateSessionSchema = z.object({
   user_id: z.string().min(1),
+});
+
+const InitiateCryptoSchema = z.object({
+  user_id: z.string().min(1),
+});
+
+const VerifyCryptoSchema = z.object({
+  deposit_address: z
+    .string()
+    .regex(/^0x[0-9a-fA-F]{40}$/, "Invalid Ethereum address"),
 });
 
 /** Build a Stripe client from env vars.  Returns null when vars are missing. */
@@ -154,5 +176,101 @@ export async function paymentRoutes(fastify: FastifyInstance): Promise<void> {
   // ─── GET /payments/card/cancel ──────────────────────────────────────────────
   fastify.get("/payments/card/cancel", async (_request, reply) => {
     return reply.status(200).send({ message: "Payment cancelled. No charges were made." });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Phase 3 — On-chain USDC payments (Base network)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // ─── POST /payments/crypto/initiate ─────────────────────────────────────────
+  // Derives a unique deposit address and starts watching for a USDC Transfer.
+  // Returns the deposit address, expected USDC amount, and expiry timestamp.
+  fastify.post("/payments/crypto/initiate", async (request, reply) => {
+    if (!process.env.WALLET_PRIVATE_KEY) {
+      return reply
+        .status(503)
+        .send({ error: "Crypto payments are not configured on this server" });
+    }
+
+    const parsed = InitiateCryptoSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: parsed.error.flatten() });
+    }
+
+    try {
+      const { depositAddress, amountUsdc, expiresAt } =
+        await usdcPaymentManager.createSession(parsed.data.user_id);
+
+      return reply.status(200).send({
+        deposit_address: depositAddress,
+        amount_usdc: amountUsdc,
+        usdc_contract: getUsdcContract(),
+        network: "Base",
+        expires_at: expiresAt.toISOString(),
+        retrieve_key_url: `/payments/crypto/key?deposit_address=${depositAddress}`,
+      });
+    } catch (err: any) {
+      fastify.log.error(err, "Crypto payment session creation failed");
+      return reply
+        .status(500)
+        .send({ error: "Failed to create crypto payment session" });
+    }
+  });
+
+  // ─── POST /payments/crypto/verify ───────────────────────────────────────────
+  // Manually check whether a payment session is still pending.
+  // The Transfer watcher issues the key automatically; this endpoint lets
+  // clients poll status before the watcher fires.
+  fastify.post("/payments/crypto/verify", async (request, reply) => {
+    const parsed = VerifyCryptoSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: parsed.error.flatten() });
+    }
+
+    const { deposit_address } = parsed.data;
+    const session = usdcPaymentManager.getSession(
+      deposit_address as `0x${string}`,
+    );
+
+    if (!session) {
+      return reply.status(404).send({
+        error: "Payment session not found or already completed",
+      });
+    }
+
+    if (new Date() > session.expiresAt) {
+      return reply.status(410).send({ error: "Payment session has expired" });
+    }
+
+    return reply.status(200).send({
+      status: "pending",
+      deposit_address: session.depositAddress,
+      amount_usdc: USDC_PRICE_DISPLAY,
+      expires_at: session.expiresAt.toISOString(),
+      message:
+        "Payment not yet confirmed. Send USDC to the deposit address and check again.",
+    });
+  });
+
+  // ─── GET /payments/crypto/key ────────────────────────────────────────────────
+  // One-time retrieval of the API key issued after a confirmed USDC transfer.
+  fastify.get("/payments/crypto/key", async (request, reply) => {
+    const { deposit_address } = request.query as { deposit_address?: string };
+    if (!deposit_address) {
+      return reply
+        .status(400)
+        .send({ error: "deposit_address query parameter is required" });
+    }
+
+    const cryptoSessionId = `crypto_${deposit_address.toLowerCase()}`;
+    const apiKey = keyStore.retrieveForSession(cryptoSessionId);
+    if (!apiKey) {
+      return reply.status(404).send({
+        error:
+          "No API key found. Payment may not have been confirmed yet.",
+      });
+    }
+
+    return reply.status(200).send({ api_key: apiKey });
   });
 }
