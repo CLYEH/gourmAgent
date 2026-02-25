@@ -14,7 +14,7 @@ A conversational agent that learns user food preferences and recommends restaura
 
 ## Current State
 
-**Phase: 1 complete — MVP working restaurant agent (no payments)**
+**Phase: 2 complete — x402 payment gating + Stripe card payments**
 
 ### Stack (decided)
 
@@ -30,10 +30,10 @@ A conversational agent that learns user food preferences and recommends restaura
 
 ### Planned Features
 
-1. **x402 micropayments** — pay-per-use API key access via the x402 micropayment protocol (Phase 2)
+1. **x402 micropayments** — pay-per-use API key access via the x402 micropayment protocol ✅ Phase 2
 2. **Restaurant discovery agent** — conversational AI that finds restaurants matching user taste preferences ✅ Phase 1
 3. **Built-in crypto wallet** — on-chain transaction support for payments (Phase 3)
-4. **Payment flexibility** — traditional card payments _or_ chainless USDC via justpay (Phase 2/3)
+4. **Payment flexibility** — traditional card payments ✅ Phase 2 _or_ chainless USDC via justpay (Phase 3)
 
 ---
 
@@ -68,10 +68,15 @@ gourmAgent/
     │   ├── tsconfig.json
     │   ├── src/
     │   │   ├── server.ts               # Fastify entry point
+    │   │   ├── keyStore.ts             # In-memory API key store (Phase 2)
+    │   │   ├── middleware/
+    │   │   │   └── x402.ts             # 402 payment-gating middleware (Phase 2)
     │   │   └── routes/
-    │   │       └── chat.ts             # POST /chat → proxies to Python agent
+    │   │       ├── chat.ts             # POST /chat → proxies to Python agent (x402-gated)
+    │   │       └── payments.ts         # Stripe checkout + webhook + key retrieval (Phase 2)
     │   └── tests/
-    │       └── chat.test.ts
+    │       ├── chat.test.ts
+    │       └── payments.test.ts
     └── shared/
         └── schemas/
             └── chat.json               # JSON Schema for ChatRequest / ChatResponse
@@ -188,4 +193,4 @@ cd packages/api   && pnpm test
 
 ---
 
-*Last updated: 2026-02-25 — Phase 1 implemented*
+*Last updated: 2026-02-25 — Phase 2 implemented*
