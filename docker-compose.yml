@@ -1,0 +1,30 @@
+services:
+  agent:
+    build:
+      context: packages/agent
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  api:
+    build:
+      context: packages/api
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      - PYTHON_AGENT_URL=http://agent:8000
+    depends_on:
+      agent:
+        condition: service_healthy
+    restart: unless-stopped
