@@ -14,16 +14,26 @@ A conversational agent that learns user food preferences and recommends restaura
 
 ## Current State
 
-**Phase: Early Ideation**
+**Phase: 1 complete — MVP working restaurant agent (no payments)**
 
-The repository contains only a `README.md` with the initial idea list. No code has been written yet. All architectural decisions are open.
+### Stack (decided)
 
-### Planned Features (from README)
+| Concern | Choice |
+|---|---|
+| Agent framework | Anthropic Python SDK (custom agentic loop) |
+| Language | Python (agent) + TypeScript (API gateway) |
+| Restaurant APIs | Google Places API |
+| Database | SQLite via SQLAlchemy 2.0 |
+| API gateway | Fastify (Node.js) |
+| Package manager (TS) | pnpm workspaces |
+| Package manager (Py) | uv / hatchling |
 
-1. **x402 micropayments** — pay-per-use API key access via the x402 micropayment protocol
-2. **Restaurant discovery agent** — conversational AI that finds restaurants matching user taste preferences
-3. **Built-in crypto wallet** — on-chain transaction support for payments
-4. **Payment flexibility** — traditional card payments _or_ chainless USDC via justpay
+### Planned Features
+
+1. **x402 micropayments** — pay-per-use API key access via the x402 micropayment protocol (Phase 2)
+2. **Restaurant discovery agent** — conversational AI that finds restaurants matching user taste preferences ✅ Phase 1
+3. **Built-in crypto wallet** — on-chain transaction support for payments (Phase 3)
+4. **Payment flexibility** — traditional card payments _or_ chainless USDC via justpay (Phase 2/3)
 
 ---
 
@@ -31,24 +41,40 @@ The repository contains only a `README.md` with the initial idea list. No code h
 
 ```
 gourmAgent/
-├── README.md       # Project ideas and feature notes
-└── CLAUDE.md       # This file (AI assistant guidance)
-```
-
-As the project grows, the expected structure is:
-
-```
-gourmAgent/
-├── CLAUDE.md
+├── .env.example                        # All env vars documented here (never commit .env)
+├── .gitignore
+├── docker-compose.yml                  # Run both services locally
+├── pnpm-workspace.yaml
+├── CLAUDE.md                           # This file
 ├── README.md
-├── package.json / pyproject.toml   # depending on chosen stack
-├── src/
-│   ├── agent/          # Core LLM agent logic
-│   ├── payments/       # x402 + crypto wallet + card payment integrations
-│   ├── restaurants/    # Restaurant search / recommendation logic
-│   └── api/            # API layer (REST or GraphQL)
-├── tests/
-└── docs/
+├── PLAN.md                             # Full project roadmap
+└── packages/
+    ├── agent/                          # Python — AI agent core
+    │   ├── Dockerfile
+    │   ├── pyproject.toml
+    │   ├── src/gourmAgent/
+    │   │   ├── agent.py                # Agentic loop (Anthropic SDK)
+    │   │   ├── server.py               # FastAPI server  POST /run
+    │   │   ├── tools/
+    │   │   │   ├── places.py           # Google Places API tool
+    │   │   │   └── prefs.py            # Preference read/write tool
+    │   │   └── memory/
+    │   │       └── store.py            # SQLAlchemy models (User, Preference)
+    │   └── tests/
+    │       └── test_agent.py
+    ├── api/                            # TypeScript — API gateway
+    │   ├── Dockerfile
+    │   ├── package.json
+    │   ├── tsconfig.json
+    │   ├── src/
+    │   │   ├── server.ts               # Fastify entry point
+    │   │   └── routes/
+    │   │       └── chat.ts             # POST /chat → proxies to Python agent
+    │   └── tests/
+    │       └── chat.test.ts
+    └── shared/
+        └── schemas/
+            └── chat.json               # JSON Schema for ChatRequest / ChatResponse
 ```
 
 ---
@@ -125,29 +151,41 @@ Update this file once the stack is decided.
 
 ---
 
-## Getting Started (Once Stack Is Chosen)
-
-This section should be updated with actual setup steps once the project is initialized. Typical steps will include:
+## Getting Started
 
 ```bash
 # Clone
 git clone <repo-url>
 cd gourmAgent
 
-# Install dependencies
-npm install   # or: pip install -e ".[dev]"
-
-# Copy env template
+# Copy and fill env vars
 cp .env.example .env
-# Fill in API keys in .env
+# Edit .env: add ANTHROPIC_API_KEY and GOOGLE_PLACES_API_KEY
+
+# ── Option A: Docker (recommended) ──────────────────────────
+docker compose up
+
+# ── Option B: Local dev ──────────────────────────────────────
+# Python agent
+cd packages/agent
+pip install -e ".[dev]"   # or: uv pip install -e ".[dev]"
+uvicorn gourmAgent.server:app --reload --port 8000
+
+# TypeScript gateway (separate terminal)
+cd packages/api
+pnpm install
+pnpm dev   # runs on port 3000
+
+# Test a query
+curl -X POST http://localhost:3000/chat \
+  -H "Content-Type: application/json" \
+  -d '{"user_id":"u1","message":"Find me ramen in SF","location":"San Francisco, CA"}'
 
 # Run tests
-npm test   # or: pytest
-
-# Start dev server
-npm run dev   # or: python -m gourmAgent
+cd packages/agent && pytest
+cd packages/api   && pnpm test
 ```
 
 ---
 
-*Last updated: 2026-02-25*
+*Last updated: 2026-02-25 — Phase 1 implemented*

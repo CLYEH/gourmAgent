@@ -1,0 +1,71 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "ChatRequest": {
+      "type": "object",
+      "title": "ChatRequest",
+      "description": "Request body sent to POST /chat (TypeScript gateway) and forwarded to POST /run (Python agent).",
+      "required": ["user_id", "message", "location"],
+      "additionalProperties": false,
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable unique identifier for the end-user (used for preference persistence)."
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The user's latest message to the restaurant discovery agent."
+        },
+        "location": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Human-readable location to search near, e.g. 'San Francisco, CA'."
+        }
+      }
+    },
+    "ToolCall": {
+      "type": "object",
+      "title": "ToolCall",
+      "description": "A single tool invocation made by the agent during a turn.",
+      "required": ["tool", "input", "output", "error"],
+      "properties": {
+        "tool": {
+          "type": "string",
+          "description": "Name of the tool that was called."
+        },
+        "input": {
+          "type": "object",
+          "description": "Arguments passed to the tool."
+        },
+        "output": {
+          "type": "string",
+          "description": "JSON-encoded return value of the tool."
+        },
+        "error": {
+          "type": "boolean",
+          "description": "True if the tool raised an exception."
+        }
+      }
+    },
+    "ChatResponse": {
+      "type": "object",
+      "title": "ChatResponse",
+      "description": "Response returned by POST /chat and POST /run.",
+      "required": ["response", "tool_calls"],
+      "additionalProperties": false,
+      "properties": {
+        "response": {
+          "type": "string",
+          "description": "The assistant's final text reply to the user."
+        },
+        "tool_calls": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/ToolCall" },
+          "description": "Ordered list of all tool calls made during this turn."
+        }
+      }
+    }
+  }
+}
