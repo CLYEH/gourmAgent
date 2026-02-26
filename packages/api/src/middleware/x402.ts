@@ -25,17 +25,29 @@ export async function x402Guard(
     process.env.API_BASE_URL ??
     `http://localhost:${process.env.PORT ?? 3000}`;
 
+  const paymentOptions: Record<string, unknown> = {
+    card: {
+      create_session_url: `${base}/payments/card/create-session`,
+      price_usd: 0.1,
+      currency: "usd",
+    },
+  };
+
+  // Include the crypto option only when the server is configured for it.
+  if (process.env.WALLET_PRIVATE_KEY) {
+    paymentOptions.crypto = {
+      initiate_url: `${base}/payments/crypto/initiate`,
+      network: "Base",
+      token: "USDC",
+      price_usdc: "0.10",
+    };
+  }
+
   return reply.status(402).send({
     error: "Payment Required",
     message:
       "A valid API key is required to use this endpoint. " +
-      "Purchase one via the payment link below.",
-    payment: {
-      card: {
-        create_session_url: `${base}/payments/card/create-session`,
-        price_usd: 0.1,
-        currency: "usd",
-      },
-    },
+      "Purchase one via one of the payment options below.",
+    payment: paymentOptions,
   });
 }
